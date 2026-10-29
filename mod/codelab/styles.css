@@ -1,0 +1,403 @@
+/* ============================================================
+   CodeLab - Estilos del editor de código integrado en Moodle
+   ============================================================ */
+
+/* ── Variables de color ── */
+:root {
+    --cl-bg-editor:      #1E1E2E;
+    --cl-bg-panel:       #181825;
+    --cl-bg-card:        #24273A;
+    --cl-bg-card-hover:  #2A2D3E;
+    --cl-border:         #313244;
+    --cl-text:           #CDD6F4;
+    --cl-text-muted:     #6C7086;
+    --cl-green:          #A6E3A1;
+    --cl-red:            #F38BA8;
+    --cl-yellow:         #F9E2AF;
+    --cl-blue:           #89B4FA;
+    --cl-purple:         #CBA6F7;
+    --cl-radius:         8px;
+    --cl-shadow:         0 2px 12px rgba(0,0,0,0.3);
+}
+
+/* ── Workspace principal ── */
+.codelab-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0 -1rem;
+}
+
+.codelab-toolbar {
+    background: var(--cl-bg-panel);
+    border: 1px solid var(--cl-border);
+    border-bottom: none;
+    border-radius: var(--cl-radius) var(--cl-radius) 0 0;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--cl-text);
+}
+
+.codelab-toolbar label {
+    color: var(--cl-text);
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+#codelab-lang-select {
+    background: var(--cl-bg-card);
+    border: 1px solid var(--cl-border);
+    color: var(--cl-text);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    padding: 4px 10px;
+    min-width: 160px;
+}
+
+#codelab-lang-select:focus {
+    outline: none;
+    border-color: var(--cl-blue);
+    box-shadow: 0 0 0 2px rgba(137,180,250,0.2);
+}
+
+/* ── Paneles ── */
+.codelab-panels {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    min-height: 520px;
+    border: 1px solid var(--cl-border);
+    border-radius: 0 0 var(--cl-radius) var(--cl-radius);
+    overflow: hidden;
+    box-shadow: var(--cl-shadow);
+}
+
+@media (max-width: 992px) {
+    .codelab-panels {
+        grid-template-columns: 1fr;
+        grid-template-rows: 400px auto;
+    }
+}
+
+/* ── Panel del editor ── */
+.codelab-editor-panel {
+    background: var(--cl-bg-editor);
+    border-right: 1px solid var(--cl-border);
+    position: relative;
+}
+
+.codelab-monaco-container {
+    width: 100%;
+    height: 520px;
+    min-height: 400px;
+}
+
+/* ── Panel de resultados ── */
+.codelab-results-panel {
+    background: var(--cl-bg-panel);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.codelab-results-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--cl-border);
+    font-size: 0.9rem;
+    color: var(--cl-text);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.codelab-testcases-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--cl-border) transparent;
+}
+
+/* ── Tarjetas de casos de prueba ── */
+.codelab-tc-card {
+    background: var(--cl-bg-card);
+    border: 1px solid var(--cl-border);
+    border-left: 4px solid var(--cl-border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: pointer;
+}
+
+.codelab-tc-card:hover {
+    background: var(--cl-bg-card-hover);
+}
+
+.codelab-tc-card.status-passed {
+    border-left-color: var(--cl-green);
+}
+
+.codelab-tc-card.status-failed {
+    border-left-color: var(--cl-red);
+}
+
+.codelab-tc-card.status-timeout {
+    border-left-color: var(--cl-yellow);
+}
+
+.codelab-tc-card.status-error {
+    border-left-color: var(--cl-red);
+}
+
+.codelab-tc-card.status-pending {
+    border-left-color: var(--cl-text-muted);
+}
+
+.tc-card-header {
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tc-status-icon {
+    margin-right: 6px;
+}
+
+.status-passed .tc-status-icon { color: var(--cl-green); }
+.status-failed .tc-status-icon { color: var(--cl-red); }
+.status-timeout .tc-status-icon { color: var(--cl-yellow); }
+.status-error .tc-status-icon { color: var(--cl-red); }
+.status-pending .tc-status-icon { color: var(--cl-text-muted); }
+
+.tc-name {
+    font-size: 0.85rem;
+    color: var(--cl-text);
+}
+
+.tc-status-text {
+    font-size: 0.75rem;
+    color: var(--cl-text-muted);
+}
+
+.tc-meta {
+    font-size: 0.75rem;
+}
+
+.tc-points {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.tc-card-body {
+    padding: 0 12px 10px 12px;
+    border-top: 1px solid var(--cl-border);
+    background: rgba(0,0,0,0.15);
+}
+
+.tc-detail {
+    margin-top: 6px;
+    font-size: 0.8rem;
+}
+
+.tc-label {
+    display: block;
+    color: var(--cl-text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tc-code {
+    display: block;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--cl-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    font-size: 0.8rem;
+    color: var(--cl-text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+/* ── Aviso de casos ocultos ── */
+.codelab-tc-hidden-notice {
+    font-size: 0.82rem;
+    border-radius: 6px;
+}
+
+/* ── Área de salida ── */
+.codelab-output-section {
+    padding: 8px 12px;
+    border-top: 1px solid var(--cl-border);
+    flex-shrink: 0;
+}
+
+.codelab-output-section .font-weight-bold {
+    color: var(--cl-text);
+    font-size: 0.85rem;
+}
+
+.codelab-output-pre {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--cl-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--cl-text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 48px;
+    max-height: 120px;
+    overflow-y: auto;
+    margin-bottom: 0;
+}
+
+/* ── Badge de puntuación ── */
+#codelab-score-badge {
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+/* ── Botones de acción ── */
+#codelab-run-btn,
+#codelab-submit-btn {
+    font-weight: 600;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+#codelab-run-btn:active,
+#codelab-submit-btn:active {
+    transform: scale(0.97);
+}
+
+#codelab-run-btn:disabled,
+#codelab-submit-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+/* ── Estado de entrega ── */
+.codelab-submission-status {
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+/* ── Formulario de configuración (mod_form.php) ── */
+.codelab-testcases-form {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 8px;
+}
+
+.codelab-tc-header {
+    font-size: 0.85rem;
+    color: #6c757d;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 8px;
+}
+
+.codelab-tc-row {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 10px;
+    transition: background 0.15s;
+}
+
+.codelab-tc-row:hover {
+    background: #f0f4ff;
+    border-color: #b8c4ff;
+}
+
+.codelab-tc-row textarea,
+.codelab-tc-row input[type="text"] {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.82rem;
+}
+
+.codelab-drag-handle {
+    cursor: grab;
+    color: #6c757d;
+}
+
+.codelab-drag-handle:active {
+    cursor: grabbing;
+}
+
+/* ── Vista de estadísticas ── */
+.codelab-stats .card {
+    border-radius: 8px;
+    transition: transform 0.15s;
+}
+
+.codelab-stats .card:hover {
+    transform: translateY(-2px);
+}
+
+/* ── Tabla de entregas del profesor ── */
+.codelab-submissions-table {
+    font-size: 0.9rem;
+}
+
+/* ── Página de detalle de entrega ── */
+.codelab-submission-code-block {
+    background: var(--cl-bg-editor);
+    color: var(--cl-text);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.85rem;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .codelab-toolbar {
+        padding: 8px;
+    }
+
+    .codelab-monaco-container {
+        height: 350px;
+    }
+
+    .tc-card-body {
+        font-size: 0.75rem;
+    }
+}
+
+/* ── Scrollbars personalizados ── */
+.codelab-testcases-results::-webkit-scrollbar,
+.codelab-output-pre::-webkit-scrollbar {
+    width: 6px;
+}
+
+.codelab-testcases-results::-webkit-scrollbar-track,
+.codelab-output-pre::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.codelab-testcases-results::-webkit-scrollbar-thumb,
+.codelab-output-pre::-webkit-scrollbar-thumb {
+    background: var(--cl-border, #444);
+    border-radius: 3px;
+}

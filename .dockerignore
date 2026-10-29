@@ -1,0 +1,12 @@
+# Archivos que no deben entrar en ningún contexto de build de Docker.
+.git
+.gitignore
+*.md
+!mod/codelab/README.md
+.env
+.env.example
+codelab-v*.zip
+codelab.zip
+.DS_Store
+Thumbs.db
+Makefile

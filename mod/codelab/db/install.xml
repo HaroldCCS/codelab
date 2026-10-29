@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/codelab/db" VERSION="20260918" COMMENT="XMLDB file for mod/codelab"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+
+    <!-- Tabla principal de actividad -->
+    <TABLE NAME="codelab" COMMENT="Almacena cada instancia de actividad CodeLab">
+      <FIELDS>
+        <FIELD NAME="id"                  TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course"              TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Referencia al id del curso"/>
+        <FIELD NAME="name"                TYPE="char"   LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="intro"               TYPE="text"   NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="introformat"         TYPE="int"    LENGTH="4"  NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="default_language"    TYPE="char"   LENGTH="20"  NOTNULL="true" DEFAULT="python" SEQUENCE="false" COMMENT="Lenguaje por defecto: python, javascript, java, c, cpp, php"/>
+        <FIELD NAME="languages_allowed"   TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="JSON array de lenguajes permitidos"/>
+        <FIELD NAME="starter_code"        TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="Código inicial que se muestra al estudiante"/>
+        <FIELD NAME="solution_code"       TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="Solución de referencia del profesor (no visible)"/>
+        <FIELD NAME="runner_code"         TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="Código envolvente (runner) con marcador {{CODE}}"/>
+        <FIELD NAME="ai_feedback_enabled" TYPE="int"    LENGTH="1"  NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1=generar recomendaciones IA en esta actividad"/>
+        <FIELD NAME="ai_criteria"         TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="JSON array de criterios cualitativos activados para la IA"/>
+        <FIELD NAME="time_limit"          TYPE="int"    LENGTH="5"  NOTNULL="true" DEFAULT="5" SEQUENCE="false" COMMENT="Límite de tiempo en segundos por ejecución"/>
+        <FIELD NAME="memory_limit"        TYPE="int"    LENGTH="6"  NOTNULL="true" DEFAULT="128" SEQUENCE="false" COMMENT="Límite de memoria en MB"/>
+        <FIELD NAME="max_attempts"        TYPE="int"    LENGTH="6"  NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 = ilimitado"/>
+        <FIELD NAME="grading_method"      TYPE="char"   LENGTH="10"  NOTNULL="true" DEFAULT="best" SEQUENCE="false" COMMENT="best|last|first|average"/>
+        <FIELD NAME="grade"               TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="100" SEQUENCE="false" COMMENT="Nota máxima"/>
+        <FIELD NAME="testcases_visible"   TYPE="int"    LENGTH="1"  NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1=estudiantes ven los casos de prueba"/>
+        <FIELD NAME="allow_submissions_from_date" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="duedate"             TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="cutoffdate"          TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"         TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified"        TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_course" TYPE="foreign" FIELDS="course" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_course" UNIQUE="false" FIELDS="course"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Casos de prueba (test cases) -->
+    <TABLE NAME="codelab_testcases" COMMENT="Casos de prueba para cada actividad CodeLab">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="codelabid"       TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="name"            TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="description"     TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Descripción opcional del caso"/>
+        <FIELD NAME="stdin"           TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Entrada estándar enviada al programa"/>
+        <FIELD NAME="expected_output" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Salida esperada para comparar"/>
+        <FIELD NAME="points"          TYPE="number" LENGTH="6" DECIMALS="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Puntos que vale este caso"/>
+        <FIELD NAME="is_hidden"       TYPE="int"  LENGTH="1"  NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1=caso oculto para estudiantes"/>
+        <FIELD NAME="ordering"        TYPE="int"  LENGTH="6"  NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"     TYPE="int"  LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_codelab" TYPE="foreign" FIELDS="codelabid" REFTABLE="codelab" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_codelabid" UNIQUE="false" FIELDS="codelabid"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Entregas de estudiantes -->
+    <TABLE NAME="codelab_submissions" COMMENT="Entregas de código de estudiantes">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="codelabid"      TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid"         TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="attempt_number" TYPE="int"    LENGTH="6"  NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="code"           TYPE="text"   NOTNULL="true" SEQUENCE="false" COMMENT="Código fuente enviado"/>
+        <FIELD NAME="language"       TYPE="char"   LENGTH="20"  NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status"         TYPE="char"   LENGTH="20"  NOTNULL="true" DEFAULT="draft" SEQUENCE="false" COMMENT="draft|submitted|graded"/>
+        <FIELD NAME="grade"          TYPE="number" LENGTH="6" DECIMALS="2" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="grade_override" TYPE="number" LENGTH="6" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="Nota manual del profesor"/>
+        <FIELD NAME="feedback"       TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="Retroalimentación del profesor"/>
+        <FIELD NAME="ai_feedback"        TYPE="text"   NOTNULL="false" SEQUENCE="false" COMMENT="Recomendaciones cualitativas generadas por IA (nunca afectan la nota)"/>
+        <FIELD NAME="ai_feedback_status" TYPE="char"   LENGTH="20" NOTNULL="true" DEFAULT="none" SEQUENCE="false" COMMENT="none|ok|error|disabled"/>
+        <FIELD NAME="ai_feedback_time"   TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Timestamp de generación de la recomendación"/>
+        <FIELD NAME="tests_passed"   TYPE="int"    LENGTH="6"  NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="tests_total"    TYPE="int"    LENGTH="6"  NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"    TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified"   TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_codelab" TYPE="foreign" FIELDS="codelabid" REFTABLE="codelab" REFFIELDS="id"/>
+        <KEY NAME="fk_user" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_codelab_user" UNIQUE="false" FIELDS="codelabid, userid"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Resultados por caso de prueba -->
+    <TABLE NAME="codelab_submission_results" COMMENT="Resultado de cada caso de prueba por entrega">
+      <FIELDS>
+        <FIELD NAME="id"              TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="submission_id"   TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="testcase_id"     TYPE="int"    LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status"          TYPE="char"   LENGTH="20"  NOTNULL="true" SEQUENCE="false" COMMENT="passed|failed|error|timeout|compile_error"/>
+        <FIELD NAME="actual_output"   TYPE="text"   NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="stderr"          TYPE="text"   NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="compile_output"  TYPE="text"   NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="execution_time"  TYPE="number" LENGTH="8" DECIMALS="3" NOTNULL="false" SEQUENCE="false" COMMENT="Tiempo en segundos"/>
+        <FIELD NAME="memory_used"     TYPE="int"    LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Memoria en KB"/>
+        <FIELD NAME="timecreated"     TYPE="int"    LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_submission" TYPE="foreign" FIELDS="submission_id" REFTABLE="codelab_submissions" REFFIELDS="id"/>
+        <KEY NAME="fk_testcase" TYPE="foreign" FIELDS="testcase_id" REFTABLE="codelab_testcases" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_submission" UNIQUE="false" FIELDS="submission_id"/>
+        <INDEX NAME="idx_testcase" UNIQUE="false" FIELDS="testcase_id"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

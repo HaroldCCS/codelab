@@ -1,0 +1,19 @@
+# ── Entorno y secretos ────────────────────────────────────
+.env
+# Configuración real del motor: contiene AUTHN_TOKEN y las
+# contraseñas de Postgres/Redis. En el repo solo va el .example.
+judge0/judge0.conf
+
+# ── Artefactos de empaquetado del plugin ─────────────────
+codelab-v*.zip
+codelab.zip
+# Carpeta temporal con el ZIP obsoleto (ver _borrar/LEEME.txt): bórrala.
+_borrar/
+
+# ── Sistema operativo ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Caché ─────────────────────────────────────────────────
+*.cache

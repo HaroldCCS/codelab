@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ============================================================
+#  Hook pre-commit: impide commitear cambios del plugin con el
+#  ZIP caducado.
+#
+#  El problema que resuelve: `$plugin->version` se sube a mano y
+#  el ZIP se regenera a mano. Cuando el release no cambia, el ZIP
+#  viejo se llama IGUAL que el nuevo y nada delata el desfase.
+#  `make check-zip` lo detecta, pero solo si alguien lo ejecuta;
+#  este hook lo ejecuta en el único momento en que siempre hay
+#  alguien mirando: justo antes de registrar el cambio.
+#
+#  Instalación:   make hooks
+#  Desactivar:    git config --unset core.hooksPath
+#  Saltarlo una vez:  git commit --no-verify
+# ============================================================
+set -u
+
+# Ante cualquier imprevisto, no bloquear el commit: este hook solo
+# debe fallar cuando la comprobación del ZIP falla de verdad.
+raiz="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$raiz" ] || exit 0
+cd "$raiz" || exit 0
+[ -f Makefile ] || exit 0
+command -v make >/dev/null 2>&1 || exit 0
+
+# ¿El commit toca el plugin? Si no, no hay nada que comprobar.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '^mod/codelab/'; then
+  exit 0
+fi
+
+echo "pre-commit: el commit toca mod/codelab/; comprobando el ZIP del plugin..."
+if make --no-print-directory check-zip; then
+  exit 0
+fi
+
+cat >&2 <<'MSG'
+
+pre-commit: ABORTADO. El ZIP del plugin no corresponde al codigo que ibas a commitear.
+
+  Arreglalo:        make plugin-zip
+  Commitear igual:  git commit --no-verify
+
+MSG
+exit 1

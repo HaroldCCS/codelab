@@ -1,0 +1,75 @@
+# ============================================================
+#  Plantilla de configuración de Judge0 (motor auto-alojado).
+#  ESTE archivo SÍ se versiona. El archivo real (judge0/judge0.conf)
+#  NO: contiene el token y las contraseñas y está en .gitignore.
+#
+#  Cómo obtener el archivo real (elige una vía):
+#
+#    A) Automática (recomendada) — lee los valores de .env:
+#         cp .env.example .env        # y rellena las claves
+#         make judge0-conf            # genera judge0/judge0.conf
+#
+#    B) Manual:
+#         cp judge0/judge0.conf.example judge0/judge0.conf
+#         # y rellena a mano AUTHN_TOKEN, POSTGRES_PASSWORD y
+#         # REDIS_PASSWORD con los MISMOS valores que .env
+#
+#  Los tres campos vacíos de abajo son obligatorios: sin ellos el
+#  motor no arranca (contraseñas) o queda abierto (token).
+# ============================================================
+
+# ── Conexión a Redis (cola de tareas) ─────────────────────
+REDIS_HOST=judge0_redis
+REDIS_PORT=6379
+# Debe coincidir con JUDGE0_REDIS_PASSWORD de .env.
+REDIS_PASSWORD=
+
+# ── Conexión a PostgreSQL ─────────────────────────────────
+POSTGRES_HOST=judge0_db
+POSTGRES_PORT=5432
+POSTGRES_DB=judge0
+POSTGRES_USER=judge0
+# Debe coincidir con JUDGE0_DB_PASSWORD de .env.
+POSTGRES_PASSWORD=
+
+# ── Comportamiento de la API ──────────────────────────────
+# Permite esperar el resultado en la misma petición (wait=true).
+ENABLE_WAIT_RESULT=true
+# Devuelve el resultado en un único objeto.
+ENABLE_COMPILER_OPTIONS=true
+ALLOW_ENABLE_NETWORK=false
+
+# ── Seguridad del sandbox (código NO confiable) ───────────
+# La red del código del estudiante queda DESHABILITADA por defecto.
+ENABLE_NETWORK=false
+# Token que Judge0 exige en la cabecera X-Auth-Token. SIN ÉL,
+# /submissions queda ABIERTO: cualquiera que alcance el puerto
+# ejecuta código arbitrario en esta máquina (SEC-01 / INC-24).
+# Genéralo con:  openssl rand -hex 24
+# y pega el MISMO valor en Moodle: Administración del sitio →
+# Plugins → Módulos de actividad → CodeLab → Clave API de Judge0.
+AUTHN_TOKEN=
+# Número de workers (procesos que ejecutan envíos en paralelo).
+COUNT=2
+
+# ── Límites de recursos por ejecución ─────────────────────
+# Tiempo de CPU máximo permitido (segundos). Alto para tolerar
+# arranques en frío de lenguajes compilados/JVM.
+MAX_CPU_TIME_LIMIT=120
+CPU_TIME_LIMIT=15
+MAX_WALL_TIME_LIMIT=140
+# Reloj de pared: debe superar el mayor límite que ofrece el
+# formulario del docente (30 s) más compilación y cola (SEC-07).
+WALL_TIME_LIMIT=45
+# Memoria (KB). 524288 KB = 512 MiB = el tope que ofrece
+# mod_form.php; con 512000 el motor rechazaba esa opción (SEC-06).
+MAX_MEMORY_LIMIT=524288
+MEMORY_LIMIT=262144
+# Tamaño máximo de salida (KB).
+MAX_MAX_FILE_SIZE=10240
+MAX_FILE_SIZE=4096
+# Número máximo de procesos/hilos que puede crear el envío.
+MAX_MAX_PROCESSES_AND_OR_THREADS=120
+MAX_PROCESSES_AND_OR_THREADS=60
+# Tamaño de la cola de envíos.
+MAX_QUEUE_SIZE=100

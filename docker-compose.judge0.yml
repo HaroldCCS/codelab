@@ -1,0 +1,93 @@
+# ============================================================
+#  Overlay OPCIONAL — Motor de ejecución auto-alojado (Judge0)
+# ------------------------------------------------------------
+#  Añade el motor que ejecuta el código NO confiable del
+#  estudiante en contenedores aislados (sandbox).
+#
+#  Uso:
+#      docker compose -f docker-compose.yml -f docker-compose.judge0.yml up
+#
+#  ANTES de levantarlo (obligatorio):
+#      cp .env.example .env          # y rellena JUDGE0_AUTH_TOKEN
+#      make judge0-conf              # genera judge0/judge0.conf
+#  Sin AUTHN_TOKEN el motor acepta CUALQUIER petición: ejecuta
+#  código arbitrario para quien alcance el puerto (SEC-01/INC-24).
+#
+#  Luego, en Moodle:
+#    Administración del sitio → Plugins → Módulos de actividad → CodeLab
+#      · URL de la API Judge0:  http://judge0_server:2358
+#      · Clave API de Judge0:   el MISMO valor de JUDGE0_AUTH_TOKEN
+#    (desde la v1.2.0 no existe el ajuste «Instancia auto-alojada»)
+#
+#  NOTA (Apple Silicon / Mac M1-M4): las imágenes de Judge0 son
+#  amd64 y requieren contenedores privilegiados con cgroups; su
+#  ejecución bajo emulación es inestable. Política del proyecto:
+#  NO se usan servicios gestionados de terceros (RapidAPI, etc.);
+#  en Mac, corre este overlay en un host/VM Linux x86 propio y
+#  apunta el plugin a esa URL — ver README.md.
+# ============================================================
+
+services:
+
+  judge0_db:
+    image: postgres:16.2
+    environment:
+      POSTGRES_DB: ${JUDGE0_DB_NAME:-judge0}
+      POSTGRES_USER: ${JUDGE0_DB_USER:-judge0}
+      # Sin valor por defecto a propósito: la contraseña vive en .env (ignorado).
+      POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:?falta JUDGE0_DB_PASSWORD en .env (cp .env.example .env)}
+    volumes:
+      - judge0_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${JUDGE0_DB_USER:-judge0}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  judge0_redis:
+    image: redis:7.2.4
+    command: ["redis-server", "--appendonly", "no", "--requirepass", "${JUDGE0_REDIS_PASSWORD:?falta JUDGE0_REDIS_PASSWORD en .env (cp .env.example .env)}"]
+    restart: unless-stopped
+
+  judge0_server:
+    image: judge0/judge0:1.13.1
+    volumes:
+      - ./judge0/judge0.conf:/judge0.conf:ro
+    ports:
+      # SOLO al bucle local: publicar en 0.0.0.0 expondría el motor a
+      # toda la red (Wi-Fi incluido). Moodle habla con él por la red
+      # interna de Compose (http://judge0_server:2358), que no pasa por
+      # aquí; esta publicación solo sirve para depurar con curl.
+      - "127.0.0.1:${JUDGE0_PORT:-2358}:2358"
+    privileged: true
+    restart: unless-stopped
+    depends_on:
+      judge0_db:
+        condition: service_healthy
+    healthcheck:
+      # Con AUTHN_TOKEN activo la API puede responder 401 (wget sale con
+      # código 8). Un 401 también prueba que está viva y atendiendo.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2358/about; s=$$?; [ $$s -eq 0 ] || [ $$s -eq 8 ]"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  judge0_worker:
+    image: judge0/judge0:1.13.1
+    command: ["./scripts/workers"]
+    volumes:
+      - ./judge0/judge0.conf:/judge0.conf:ro
+    privileged: true
+    restart: unless-stopped
+    depends_on:
+      judge0_db:
+        condition: service_healthy
+      # El worker toma los envíos de la cola de Redis: sin él no arranca.
+      judge0_redis:
+        condition: service_started
+
+volumes:
+  judge0_db_data:

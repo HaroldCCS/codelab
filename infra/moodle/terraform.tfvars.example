@@ -1,0 +1,49 @@
+# Copia a terraform.tfvars y ajusta.  cp terraform.tfvars.example terraform.tfvars
+
+aws_region = "us-east-1"
+project    = "codelab"
+
+app_instance_type  = "t3.small"
+data_instance_type = "t3.micro"
+
+asg_min_size         = 1
+asg_max_size         = 3
+asg_desired_capacity = 1
+cpu_target_percent   = 65
+
+# ---------------------------------------------------------------------------
+# SECRETOS — CÁMBIALOS. Ya no hay restricción de comillas: los scripts de
+# arranque reciben los valores en base64, así que cualquier carácter vale.
+# ---------------------------------------------------------------------------
+db_password      = "pon-una-clave-de-12-o-mas"
+db_root_password = "pon-otra-distinta-de-12-o-mas"
+
+# Debe cumplir la política de Moodle: 8+ caracteres con minúscula,
+# mayúscula, dígito y símbolo. Terraform lo valida en `plan`.
+moodle_admin_password = "CambiaEsta-Clave1!"
+moodle_admin_email    = "tu-correo@ejemplo.com"
+
+# Plugin CodeLab. El repositorio debe ser accesible SIN credenciales
+# (la instancia clona con git, sin llaves) y contener mod/codelab.
+plugin_git_url = "https://github.com/HaroldCCS/codelab.git"
+plugin_git_ref = "v1.6.2" # etiqueta fija: el despliegue es reproducible
+
+# ---------------------------------------------------------------------------
+# Motor Judge0 — copia los dos valores del stack judge0.
+#   judge0_url        = output 'judge0_url'   (sin barra final)
+#   judge0_auth_token = el MISMO judge0_auth_token que usaste allí
+# ---------------------------------------------------------------------------
+judge0_url        = "http://REEMPLAZA-con-el-DNS-del-ALB-de-judge0"
+judge0_auth_token = "el-mismo-token-del-stack-judge0"
+
+# Depuración sin SSH.
+enable_ssm = true
+
+# SSH opcional
+key_name         = ""
+ssh_ingress_cidr = "127.0.0.1/32"
+
+# Imágenes fijadas
+moodle_version = "405"
+moodle_image   = "moodlehq/moodle-php-apache:8.3"
+mariadb_image  = "mariadb:10.11"

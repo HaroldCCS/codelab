@@ -1,0 +1,224 @@
+#!/bin/bash
+# ============================================================
+#  Nodo Moodle (Apache+PHP) con docroot y moodledata en EFS.
+#  La PRIMERA instancia instala Moodle + el plugin CodeLab y lo
+#  conecta al motor Judge0; las demas esperan y solo sirven.
+#
+#  Las variables con dolar-llave las sustituye Terraform ANTES de
+#  subir el script; las $VAR son variables de bash en ejecucion.
+# ============================================================
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+# --- Secretos y parametros (base64 -> variables entrecomilladas) ---
+DB_NAME="$(printf '%s' '${db_name_b64}' | base64 -d)"
+DB_USER="$(printf '%s' '${db_user_b64}' | base64 -d)"
+DB_PASS="$(printf '%s' '${db_pass_b64}' | base64 -d)"
+ADMIN_USER="$(printf '%s' '${admin_user_b64}' | base64 -d)"
+ADMIN_PASS="$(printf '%s' '${admin_pass_b64}' | base64 -d)"
+ADMIN_EMAIL="$(printf '%s' '${admin_email_b64}' | base64 -d)"
+JUDGE0_TOKEN="$(printf '%s' '${judge0_token_b64}' | base64 -d)"
+DATA_IP='${data_ip}'
+MOODLE_URL='${moodle_url}'
+JUDGE0_URL='${judge0_url}'
+IMG='${moodle_image}'
+
+apt-get update -y
+apt-get install -y docker.io nfs-common git curl netcat-openbsd
+systemctl enable --now docker
+
+# ------------------------------------------------------------------
+#  0. PHP parcheado o no arrancamos.
+#     PHP2Shell (CVE-2026-109618 / CVE-2026-109619, 21-oct-2026): RCE
+#     sin autenticar en todo PHP que atiende web, peor con mod_php (el
+#     que trae esta imagen). Solo lo corrigen 8.2.35, 8.3.36, 8.4.27 y
+#     8.5.12; 8.1 y anteriores no tienen version oficial corregida.
+#     La etiqueta de la imagen es flotante: se descarga EXPLICITAMENTE y
+#     se comprueba la version real, porque una cache vieja o un mirror
+#     desfasado servirian un PHP vulnerable sin que nada lo dijera.
+# ------------------------------------------------------------------
+docker pull "$IMG"
+docker run --rm --entrypoint php "$IMG" -r '
+  $fixed = ["8.2" => "8.2.35", "8.3" => "8.3.36", "8.4" => "8.4.27", "8.5" => "8.5.12"];
+  $branch = PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;
+  $ok = isset($fixed[$branch]) ? version_compare(PHP_VERSION, $fixed[$branch], ">=")
+                               : version_compare($branch, "8.5", ">");
+  fwrite(STDERR, "codelab: PHP " . PHP_VERSION . ($ok ? " parcheado\n" : " VULNERABLE a PHP2Shell (CVE-2026-109618/109619): actualiza moodle_image\n"));
+  exit($ok ? 0 : 1);'
+
+#  Endurecimiento que se monta en el contenedor web. El progreso de
+#  subida de sesion es el camino confirmado de CVE-2026-115560, que a
+#  29-oct-2026 sigue sin version corregida; Moodle no lo usa, asi que
+#  apagarlo no rompe nada. Va en conf.d (antes de parsear la peticion):
+#  PHP avisa de que ini_set() o .user.ini NO sirven para esto.
+#  La imagen moodlehq viene pensada para desarrollo y muestra los errores
+#  de PHP en pantalla (Moodle lo marca en su comprobacion core_displayerrors):
+#  en produccion se apagan para no filtrar rutas ni trazas.
+mkdir -p /etc/codelab
+cat >/etc/codelab/99-codelab-seguridad.ini <<'INI'
+session.upload_progress.enabled = 0
+expose_php = Off
+display_errors = Off
+display_startup_errors = Off
+INI
+chmod 644 /etc/codelab/99-codelab-seguridad.ini
+
+# ------------------------------------------------------------------
+#  1. Montar EFS. Si no monta, ABORTAMOS: seguir escribiria Moodle en
+#     el disco local y cada instancia tendria su propia copia.
+# ------------------------------------------------------------------
+EFS_DNS="${efs_id}.efs.${aws_region}.amazonaws.com"
+MOUNT_OPTS="nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,_netdev"
+mkdir -p /mnt/efs
+mounted=0
+for i in $(seq 1 30); do
+  if mountpoint -q /mnt/efs || mount -t nfs4 -o "$MOUNT_OPTS" "$EFS_DNS:/" /mnt/efs; then
+    mounted=1; break
+  fi
+  echo "codelab: esperando EFS... intento $i/30"; sleep 10
+done
+if [ "$mounted" -ne 1 ]; then
+  echo "codelab: ERROR no se pudo montar EFS ($EFS_DNS)"; exit 1
+fi
+grep -q "$EFS_DNS" /etc/fstab || echo "$EFS_DNS:/ /mnt/efs nfs4 $MOUNT_OPTS 0 0" >> /etc/fstab
+
+MOODLE_DIR=/mnt/efs/moodle
+DATA_DIR=/mnt/efs/moodledata
+LOCKDIR=/mnt/efs/.install-lock
+DONE=/mnt/efs/.installed
+mkdir -p "$DATA_DIR"
+
+# ------------------------------------------------------------------
+#  2. Esperar a MariaDB. El nodo de datos arranca en paralelo a este;
+#     sin esta espera install.php falla y el despliegue se cae.
+# ------------------------------------------------------------------
+for i in $(seq 1 120); do
+  nc -z -w 3 "$DATA_IP" 3306 && break
+  echo "codelab: esperando MariaDB en $DATA_IP ($i/120)..."; sleep 10
+done
+nc -z -w 3 "$DATA_IP" 3306 || { echo "codelab: ERROR MariaDB inaccesible"; exit 1; }
+
+# ------------------------------------------------------------------
+#  3. Instalacion con lock. Reglas:
+#     - Si ya esta instalado, ni se intenta.
+#     - El lock se libera SIEMPRE (trap), tambien si algo falla, para
+#       que la siguiente instancia pueda reintentar en vez de que
+#       todas se queden esperando para siempre.
+#     - Un lock huerfano de mas de 30 min se considera muerto.
+#
+#  OJO, esto NO actualiza el plugin. Una vez existe la marca de
+#  instalado, este bloque entero se salta: no se vuelve a clonar el
+#  repositorio ni se copia mod/codelab ni se ejecuta upgrade.php. Un
+#  apply con otro plugin_git_ref solo afecta a instancias que se
+#  instalen desde cero. Para actualizar un stack vivo (y aplicar los
+#  cambios de esquema de db/upgrade.php) hay un procedimiento manual
+#  en infra/README.md, seccion "Actualizar el plugin en un stack ya
+#  desplegado".
+# ------------------------------------------------------------------
+release_lock() { rmdir "$LOCKDIR" 2>/dev/null || true; }
+
+if [ ! -f "$DONE" ]; then
+  # Lock huerfano de un intento anterior que murio a medias
+  if [ -d "$LOCKDIR" ]; then
+    lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCKDIR") ))
+    if [ "$lock_age" -gt 1800 ]; then
+      echo "codelab: lock huerfano de $lock_age s, lo libero"; release_lock
+    fi
+  fi
+
+  if mkdir "$LOCKDIR" 2>/dev/null; then
+    trap release_lock EXIT
+    if [ ! -f "$MOODLE_DIR/config.php" ]; then
+      echo "codelab: instalando Moodle (soy la instancia elegida)"
+
+      # 3a. Codigo de Moodle en EFS
+      curl -fL --retry 5 --retry-delay 10 \
+        "https://download.moodle.org/download.php/direct/stable${moodle_version}/moodle-latest-${moodle_version}.tgz" \
+        -o /tmp/moodle.tgz
+      rm -rf "$MOODLE_DIR"
+      tar -xzf /tmp/moodle.tgz -C /mnt/efs      # crea /mnt/efs/moodle
+      test -f "$MOODLE_DIR/admin/cli/install.php"
+
+      # 3b. Plugin CodeLab dentro de Moodle
+      rm -rf /tmp/plugin
+      git clone --depth 1 --branch '${plugin_git_ref}' '${plugin_git_url}' /tmp/plugin
+      test -d /tmp/plugin/mod/codelab || { echo "codelab: ERROR el repo no trae mod/codelab"; exit 1; }
+      cp -r /tmp/plugin/mod/codelab "$MOODLE_DIR/mod/codelab"
+
+      chown -R 33:33 "$MOODLE_DIR" "$DATA_DIR"
+
+      # 3c. Instalar Moodle (crea config.php en EFS, core + plugins)
+      docker run --rm \
+        -v "$MOODLE_DIR":/var/www/html \
+        -v "$DATA_DIR":/var/moodledata \
+        "$IMG" \
+        php /var/www/html/admin/cli/install.php \
+          --non-interactive --agree-license --lang=es \
+          --wwwroot="$MOODLE_URL" --dataroot=/var/moodledata \
+          --dbtype=mariadb --dbhost="$DATA_IP" --dbport=3306 \
+          --dbname="$DB_NAME" --dbuser="$DB_USER" --dbpass="$DB_PASS" \
+          --fullname="CodeLab LMS" --shortname="codelab" \
+          --adminuser="$ADMIN_USER" --adminpass="$ADMIN_PASS" --adminemail="$ADMIN_EMAIL"
+
+      # 3d. Cache local en disco de la instancia (EFS es NFS: lento
+      #     para los miles de stat() que hace PHP en cada peticion).
+      if ! grep -q localcachedir "$MOODLE_DIR/config.php"; then
+        sed -i "0,/^require_once/s##\$CFG->localcachedir = '/var/local-cache';\nrequire_once#" \
+          "$MOODLE_DIR/config.php" || true
+      fi
+
+      # 3e. Conectar el plugin al motor Judge0 (auto-alojado)
+      #     Desde la v1.2.0 el plugin solo tiene dos ajustes de motor:
+      #     judge0_api_url y judge0_api_key. El antiguo judge0_self_hosted
+      #     desaparecio al quitar la caida a un servicio gestionado; escribirlo
+      #     solo dejaba una fila huerfana en config_plugins que nadie lee.
+      run_cfg() {
+        docker run --rm -v "$MOODLE_DIR":/var/www/html -v "$DATA_DIR":/var/moodledata "$IMG" \
+          php /var/www/html/admin/cli/cfg.php --component=mod_codelab --name="$1" --set="$2"
+      }
+      run_cfg judge0_api_url "$JUDGE0_URL"
+      if [ -n "$JUDGE0_TOKEN" ]; then
+        run_cfg judge0_api_key "$JUDGE0_TOKEN"
+      fi
+
+      chown -R 33:33 "$MOODLE_DIR" "$DATA_DIR"
+      touch "$DONE"
+      echo "codelab: Moodle instalado"
+    else
+      touch "$DONE"
+    fi
+    release_lock
+    trap - EXIT
+  else
+    # Otra instancia esta instalando: esperar a que termine.
+    for i in $(seq 1 120); do
+      [ -f "$DONE" ] && break
+      echo "codelab: esperando la instalacion de Moodle... $i/120"; sleep 10
+    done
+    [ -f "$DONE" ] || { echo "codelab: ERROR la instalacion no termino"; exit 1; }
+  fi
+fi
+
+# ------------------------------------------------------------------
+#  4. Servir Moodle
+# ------------------------------------------------------------------
+mkdir -p /var/local-cache && chown 33:33 /var/local-cache
+docker rm -f moodle 2>/dev/null || true
+docker run -d --name moodle --restart always \
+  -p 80:80 \
+  -v "$MOODLE_DIR":/var/www/html \
+  -v "$DATA_DIR":/var/moodledata \
+  -v /var/local-cache:/var/local-cache \
+  -v /etc/codelab/99-codelab-seguridad.ini:/usr/local/etc/php/conf.d/99-codelab-seguridad.ini:ro \
+  "$IMG"
+
+# ------------------------------------------------------------------
+#  5. Cron de Moodle (cada minuto). Moodle serializa sus tareas con
+#     locks en la BD, asi que es seguro que corra en cada nodo.
+# ------------------------------------------------------------------
+cat >/etc/cron.d/moodle <<'CRON'
+* * * * * root docker exec moodle php /var/www/html/admin/cli/cron.php >/dev/null 2>&1
+CRON
+chmod 644 /etc/cron.d/moodle
+
+echo "codelab: nodo Moodle listo"

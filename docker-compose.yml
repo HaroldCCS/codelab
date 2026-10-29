@@ -1,0 +1,126 @@
+# ============================================================
+#  Entorno de desarrollo local — Moodle + CodeLab
+# ------------------------------------------------------------
+#  Uso normal (Mac / Linux / Windows):
+#
+#        cp .env.example .env      # obligatorio: ahí van las contraseñas
+#        docker compose up -d
+#        docker compose logs -f plugin_installer   # ver la instalación
+#
+#  Levanta Moodle en http://localhost:8080 (MOODLE_PORT de .env). El
+#  servicio "plugin_installer" descarga Moodle 4.5, lo instala junto con
+#  el plugin CodeLab y siembra los datos de demostración; el servicio web
+#  "moodle" arranca cuando el instalador termina bien.
+#
+#  Tras editar el código del plugin, para re-desplegar:
+#        make redeploy      (o: docker compose up -d --force-recreate plugin_installer)
+#
+#  ¿Por qué ya no Bitnami? (2026-10-29) La imagen bitnamilegacy/moodle:4.5
+#  es un archivo congelado (abr-2025) con PHP 8.1.32: vulnerable a PHP2Shell
+#  (CVE-2026-109618/109619) y SIN parche posible, porque 8.1 ya no recibe
+#  versiones oficiales y esa imagen no se vuelve a publicar. Ahora se usa la
+#  misma imagen que en AWS (moodlehq/moodle-php-apache, PHP 8.3.36+) y la
+#  MariaDB oficial. Los volúmenes son nuevos: los antiguos de Bitnami
+#  (repositorio_mariadb_data, repositorio_moodle_data,
+#  repositorio_moodle_datadir) quedan intactos y sin uso.
+#
+#  Para AÑADIR el motor de ejecución auto-alojado (Judge0):
+#
+#      docker compose -f docker-compose.yml -f docker-compose.judge0.yml up
+#
+#  (Política: Judge0 SIEMPRE auto-hospedado, nunca servicios gestionados de
+#   terceros. En Mac con Apple Silicon, córrelo en un host/VM Linux propio;
+#   ver README.md → sección "Motor de ejecución".)
+# ============================================================
+
+services:
+
+  # ── Base de datos de Moodle ───────────────────────────────
+  mariadb:
+    # Imagen oficial y mantenida, la misma rama que en AWS (infra/moodle).
+    image: mariadb:10.11
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      # Las contraseñas NO tienen valor por defecto a propósito: viven en
+      # .env (ignorado por git), nunca en un archivo versionado (SEC-09).
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?falta DB_ROOT_PASSWORD en .env (cp .env.example .env)}
+      - MARIADB_DATABASE=${DB_NAME:-moodle}
+      - MARIADB_USER=${DB_USER:-moodle}
+      - MARIADB_PASSWORD=${DB_PASSWORD:?falta DB_PASSWORD en .env (cp .env.example .env)}
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── Instalador de Moodle + plugin (contenedor de un solo uso) ──
+  plugin_installer:
+    # La MISMA imagen que sirve Moodle: así el PHP que instala es el que
+    # atiende. El instalador aborta si ese PHP no tiene el parche de
+    # PHP2Shell (scripts/check-php-cve.php).
+    image: moodlehq/moodle-php-apache:8.3
+    entrypoint: ["/bin/bash", "/install-plugin.sh"]
+    environment:
+      - DB_NAME=${DB_NAME:-moodle}
+      - DB_USER=${DB_USER:-moodle}
+      - DB_PASSWORD=${DB_PASSWORD:?falta DB_PASSWORD en .env (cp .env.example .env)}
+      - MOODLE_PORT=${MOODLE_PORT:-8080}
+      - MOODLE_ADMIN_USER=${MOODLE_ADMIN_USER:-admin}
+      - MOODLE_ADMIN_PASS=${MOODLE_ADMIN_PASS:?falta MOODLE_ADMIN_PASS en .env (cp .env.example .env)}
+      - MOODLE_ADMIN_EMAIL=${MOODLE_ADMIN_EMAIL:-admin@codelab.local}
+      - MOODLE_SITE_NAME=${MOODLE_SITE_NAME:-CodeLab - Editor de Código}
+      - JUDGE0_AUTH_TOKEN=${JUDGE0_AUTH_TOKEN:-}
+      # Sembrar curso + estudiante + actividad de prueba (1). Pon "0" para no hacerlo.
+      - SEED_DEMO=${SEED_DEMO:-1}
+    volumes:
+      - moodle_html:/var/www/html
+      - moodledata:/var/www/moodledata
+      - phpunitdata:/var/www/phpunitdata
+      - ./mod/codelab:/plugin-src:ro
+      - ./scripts/install-plugin.sh:/install-plugin.sh:ro
+      - ./scripts/check-php-cve.php:/check-php-cve.php:ro
+      - ./scripts/seed-demo.php:/seed-demo.php:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: "no"
+
+  # ── Moodle (Apache + mod_php) ─────────────────────────────
+  moodle:
+    image: moodlehq/moodle-php-apache:8.3
+    ports:
+      - "${MOODLE_PORT:-8080}:80"
+    volumes:
+      - moodle_html:/var/www/html
+      - moodledata:/var/www/moodledata
+      - phpunitdata:/var/www/phpunitdata
+      # Endurecimiento de PHP (CVE-2026-115560, sin parche aún). Ver el archivo.
+      - ./config/php/99-codelab-seguridad.ini:/usr/local/etc/php/conf.d/99-codelab-seguridad.ini:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      plugin_installer:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ── Cron de Moodle (cada minuto, como en AWS) ─────────────
+  moodle_cron:
+    image: moodlehq/moodle-php-apache:8.3
+    entrypoint: ["/bin/sh", "-c", "while true; do runuser -u www-data -- php /var/www/html/admin/cli/cron.php >/dev/null 2>&1; sleep 60; done"]
+    volumes:
+      - moodle_html:/var/www/html
+      - moodledata:/var/www/moodledata
+    depends_on:
+      plugin_installer:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  moodle_html:
+  moodledata:
+  phpunitdata:

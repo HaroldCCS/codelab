@@ -1,0 +1,43 @@
+# Copia a terraform.tfvars y ajusta.  cp terraform.tfvars.example terraform.tfvars
+
+aws_region = "us-east-1"
+project    = "codelab"
+
+# Tamaños pequeños por costo. Sube app_instance_type si Judge0 va lento.
+app_instance_type  = "t3.small"
+data_instance_type = "t3.micro"
+
+# Auto-escalado horizontal por CPU.
+asg_min_size         = 1
+asg_max_size         = 4
+asg_desired_capacity = 1
+cpu_target_percent   = 60
+worker_count         = 2
+
+# ---------------------------------------------------------------------------
+# SECRETOS — CÁMBIALOS.
+# Solo se admiten letras, dígitos, _ . y -  (Judge0 lee judge0.conf como
+# fichero de entorno; otros símbolos lo rompen). Genéralos así:
+#     openssl rand -hex 16
+# ---------------------------------------------------------------------------
+postgres_password = "cambia-esto-16-o-mas-caracteres"
+redis_password    = "cambia-esto-tambien-distinto"
+
+# Token que exige Judge0 en la cabecera X-Auth-Token.
+# SIN ESTE TOKEN el ALB es un endpoint PÚBLICO de ejecución de código.
+# Genéralo con:  openssl rand -hex 24
+# Este mismo valor va en el stack de Moodle (judge0_auth_token).
+judge0_auth_token = "genera-uno-con-openssl-rand-hex-24"
+
+# Depuración: SSM Session Manager (sin abrir el puerto 22). Déjalo en true
+# al menos para el primer despliegue.
+enable_ssm = true
+
+# SSH opcional (déjalo vacío: con SSM no hace falta).
+key_name         = ""
+ssh_ingress_cidr = "127.0.0.1/32"
+
+# Imágenes fijadas (no uses 'latest').
+judge0_version = "1.13.1"
+postgres_image = "postgres:13"
+redis_image    = "redis:7.2.4"

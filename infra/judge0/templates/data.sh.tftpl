@@ -1,0 +1,43 @@
+#!/bin/bash
+# ============================================================
+#  Nodo de datos de Judge0: Postgres + Redis en Docker.
+#  Los secretos llegan en base64 (Terraform los codifica) y se
+#  decodifican a variables de bash SIEMPRE entrecomilladas, para
+#  que ningun caracter especial rompa el comando.
+# ============================================================
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+# --- Secretos (base64 -> variable de bash) ---
+PG_DB="$(printf '%s' '${pg_db_b64}' | base64 -d)"
+PG_USER="$(printf '%s' '${pg_user_b64}' | base64 -d)"
+PG_PASS="$(printf '%s' '${pg_pass_b64}' | base64 -d)"
+REDIS_PASS="$(printf '%s' '${redis_pass_b64}' | base64 -d)"
+
+# --- Docker ---
+apt-get update -y
+apt-get install -y docker.io
+systemctl enable --now docker
+
+mkdir -p /data/pg
+
+# --- PostgreSQL (base de datos de Judge0) ---
+docker rm -f judge0-db 2>/dev/null || true
+docker run -d --name judge0-db --restart always \
+  -e POSTGRES_DB="$PG_DB" \
+  -e POSTGRES_USER="$PG_USER" \
+  -e POSTGRES_PASSWORD="$PG_PASS" \
+  -p 5432:5432 \
+  -v /data/pg:/var/lib/postgresql/data \
+  "${postgres_image}"
+
+# --- Redis (cola de tareas de Judge0) ---
+docker rm -f judge0-redis 2>/dev/null || true
+docker run -d --name judge0-redis --restart always \
+  -p 6379:6379 \
+  "${redis_image}" redis-server --appendonly no --requirepass "$REDIS_PASS"
+
+# --- Marcador de exito: lo lee el nodo app para saber que arrancamos ---
+docker ps --format '{{.Names}}' | grep -q judge0-db
+docker ps --format '{{.Names}}' | grep -q judge0-redis
+echo "codelab: nodo de datos listo"
