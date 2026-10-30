@@ -223,7 +223,7 @@ Casos típicos:
 | Instancias que se reemplazan en bucle | La gracia del ASG se agotó: revisa `cloud-init-output.log` de una instancia antes de que muera. |
 | Judge0 ejecuta pero todo da `Internal Error` | El nodo sigue en cgroup v2. Comprueba `stat -fc %T /sys/fs/cgroup` (debe decir `tmpfs`) y `grep unified_cgroup /proc/cmdline`. En la AMI cloud de Ubuntu, `/etc/default/grub.d/50-cloudimg-settings.cfg` pisa lo que se escriba en `/etc/default/grub`; por eso el flag va en `99-codelab-cgroupv1.cfg` (corregido el 2026-10-30). |
 | `judge0-server` en bucle con *Connection refused* hacia Postgres | El contenedor (uid 1000) no puede leer `/opt/judge0/judge0.conf` y usa `localhost`. Debe ser `1000:600` (`stat -c %u:%a`). Corregido el 2026-10-30. |
-| El grupo de Judge0 sube a 4 instancias sin tráfico | La CPU del arranque se leía como carga. Lo evita `default_instance_warmup` (añadido el 2026-10-30). |
+| El grupo de Judge0 sube a 4 instancias sin tráfico | Casi siempre, un nodo en bucle de reinicios (mira `docker ps`: el servidor con pocos segundos de vida). El 2026-10-30 fue el `judge0.conf` ilegible: 83-95 % de CPU sostenido; un arranque sano no pasa de ~56 %. `default_instance_warmup` excluye además los primeros 15 min de cada nodo. |
 | `apply` falla con *Access denied … AWSServiceRoleForAutoScaling* | Primera vez en la cuenta; ver «Antes del primer despliegue». Repite el `apply`. |
 
 ## Ofrecer Judge0 a otra universidad
