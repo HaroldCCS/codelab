@@ -24,9 +24,16 @@ paso "1/4  Formato"
 if "$TF" fmt -recursive -check -diff . ; then bien "todo formateado"; else mal "hay ficheros sin formatear (arréglalo con: $TF fmt -recursive .)"; fi
 
 paso "2/4  Validación de sintaxis y esquema"
+# Cada stack se valida con su propio TF_DATA_DIR temporal: si el stack ya se
+# inicializó contra el backend S3 real (tras un despliegue), reutilizar su
+# .terraform hacía que `init -backend=false` intentara leer el estado remoto
+# y fallara con 403 sin credenciales, aunque el código fuera válido.
 for d in bootstrap judge0 moodle; do
-  ( cd "$d" && "$TF" init -backend=false -input=false >/dev/null 2>&1 && "$TF" validate ) \
+  tmpdata="$(mktemp -d)"
+  ( cd "$d" && TF_DATA_DIR="$tmpdata" "$TF" init -backend=false -input=false >/dev/null 2>&1 \
+      && TF_DATA_DIR="$tmpdata" "$TF" validate ) \
     && bien "$d" || mal "$d no valida"
+  rm -rf "$tmpdata"
 done
 
 paso "3/4  Renderizado de los user_data"

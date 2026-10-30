@@ -5,6 +5,11 @@
 *.tfstate.*
 crash.log
 
+# Planes guardados (`terraform plan -out=...`): llevan los valores de las
+# variables EN CLARO, secretos incluidos. Nunca al repositorio.
+tfplan*
+*.tfplan
+
 # Variables con secretos (usa los .example)
 terraform.tfvars
 *.auto.tfvars

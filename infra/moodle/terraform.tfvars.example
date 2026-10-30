@@ -26,7 +26,7 @@ moodle_admin_email    = "tu-correo@ejemplo.com"
 # Plugin CodeLab. El repositorio debe ser accesible SIN credenciales
 # (la instancia clona con git, sin llaves) y contener mod/codelab.
 plugin_git_url = "https://github.com/HaroldCCS/codelab.git"
-plugin_git_ref = "v1.6.2" # etiqueta fija: el despliegue es reproducible
+plugin_git_ref = "despliegue-2026-10-30" # etiqueta fija (plugin 1.6.2 + infraestructura corregida tras el primer despliegue)
 
 # ---------------------------------------------------------------------------
 # Motor Judge0 — copia los dos valores del stack judge0.

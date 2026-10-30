@@ -15,9 +15,9 @@ terraform {
   # Backend S3. Bucket de state fijado (creado previamente fuera de Terraform).
   # No hace falta pasar -backend-config al inicializar:  terraform init
   backend "s3" {
-    bucket       = "terraform-state-tesis-372814632174213946792314786213798123"
     # El bucket vive en us-east-2 (cuenta «tesis», 107758684131); con us-east-1 el backend
     # responde 403/301. Los recursos se crean en var.aws_region, que puede ser otra.
+    bucket       = "terraform-state-tesis-372814632174213946792314786213798123"
     key          = "judge0/terraform.tfstate"
     region       = "us-east-2"
     encrypt      = true

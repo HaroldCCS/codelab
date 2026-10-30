@@ -91,6 +91,12 @@ if [ -n "$AUTH_TOKEN" ]; then
   printf 'AUTHN_TOKEN=%s\n' "$AUTH_TOKEN" >>/opt/judge0/judge0.conf
 fi
 chmod 600 /opt/judge0/judge0.conf
+# Los contenedores de Judge0 corren como uid 1000 (usuario "judge0"): con el
+# archivo en root:root 600 no podian leerlo, Rails caia a sus valores por
+# defecto (Postgres en localhost) y el servidor entraba en bucle con
+# "Connection refused" (comprobado en AWS el 2026-10-30). Se mantiene 600 y
+# se le da al uid 1000, que en la AMI de Ubuntu es "ubuntu" (ya tiene sudo).
+chown 1000 /opt/judge0/judge0.conf
 
 # --- Descargar la imagen antes de arrancar (con reintentos) ---
 for i in $(seq 1 5); do
@@ -145,8 +151,18 @@ systemctl enable judge0.service
 #  puesto no reiniciamos, pero entonces hay que arrancar el servicio
 #  a mano: si no, nadie levantaria Judge0 en este arranque.
 # ------------------------------------------------------------------
-if ! grep -q "systemd.unified_cgroup_hierarchy=0" /etc/default/grub; then
-  sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 systemd.unified_cgroup_hierarchy=0"/' /etc/default/grub
+#
+#  OJO: en las imagenes cloud de Ubuntu, /etc/default/grub.d/50-cloudimg-settings.cfg
+#  vuelve a definir GRUB_CMDLINE_LINUX_DEFAULT y pisa lo que se escriba en
+#  /etc/default/grub. Editar ese archivo (como se hacia antes) dejaba el
+#  kernel en cgroup v2 tras el reinicio y el sandbox fallaba con
+#  "Internal Error" (comprobado en AWS el 2026-10-30: /proc/cmdline sin el
+#  flag). Un 99-*.cfg se lee despues del 50-* y le anade el flag.
+#  Se mira /proc/cmdline, no el archivo: es lo que de verdad arranco.
+# ------------------------------------------------------------------
+if ! grep -q "systemd.unified_cgroup_hierarchy=0" /proc/cmdline; then
+  echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT systemd.unified_cgroup_hierarchy=0"' \
+    > /etc/default/grub.d/99-codelab-cgroupv1.cfg
   update-grub
   echo "codelab: cgroup v1 activado, reiniciando"
   reboot

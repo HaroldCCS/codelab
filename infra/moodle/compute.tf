@@ -134,9 +134,17 @@ resource "aws_autoscaling_group" "app" {
 
   # La primera instancia descarga Moodle (~80 MB), lo instala en EFS
   # (NFS, lento) y actualiza los plugins. Con gracia corta el ASG la
-  # mata a mitad de la instalación.
-  health_check_grace_period = 1200
-  wait_for_capacity_timeout = "25m"
+  # mata a mitad de la instalación. Medido en AWS el 2026-10-30 (t3.small):
+  # solo descomprimir Moodle 4.5 en EFS y darle dueño tardó ~17 min, y con
+  # 1200 s la instancia murió en plena instalación, dejando la BD a medias y
+  # el lock de EFS huérfano. Una hora deja margen para install.php.
+  health_check_grace_period = 3600
+  wait_for_capacity_timeout = "65m"
+
+  # La instalación en EFS deja la CPU alta muchos minutos; sin calentamiento el
+  # escalado por CPU lo confunde con carga y lanza nodos que solo esperan el
+  # lock (mismo efecto que se vio en Judge0 el 2026-10-30).
+  default_instance_warmup = 1800
 
   launch_template {
     id      = aws_launch_template.app.id

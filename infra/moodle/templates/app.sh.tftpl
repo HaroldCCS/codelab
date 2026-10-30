@@ -104,7 +104,7 @@ nc -z -w 3 "$DATA_IP" 3306 || { echo "codelab: ERROR MariaDB inaccesible"; exit 
 #     - El lock se libera SIEMPRE (trap), tambien si algo falla, para
 #       que la siguiente instancia pueda reintentar en vez de que
 #       todas se queden esperando para siempre.
-#     - Un lock huerfano de mas de 30 min se considera muerto.
+#     - Un lock huerfano de mas de 60 min se considera muerto.
 #
 #  OJO, esto NO actualiza el plugin. Una vez existe la marca de
 #  instalado, este bloque entero se salta: no se vuelve a clonar el
@@ -121,7 +121,9 @@ if [ ! -f "$DONE" ]; then
   # Lock huerfano de un intento anterior que murio a medias
   if [ -d "$LOCKDIR" ]; then
     lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCKDIR") ))
-    if [ "$lock_age" -gt 1800 ]; then
+    # 3600 s, coherente con health_check_grace_period: con 1800 una instancia
+    # podia dar por muerta una instalacion que seguia viva (tarda >20 min en EFS).
+    if [ "$lock_age" -gt 3600 ]; then
       echo "codelab: lock huerfano de $lock_age s, lo libero"; release_lock
     fi
   fi
@@ -191,9 +193,9 @@ if [ ! -f "$DONE" ]; then
     trap - EXIT
   else
     # Otra instancia esta instalando: esperar a que termine.
-    for i in $(seq 1 120); do
+    for i in $(seq 1 360); do
       [ -f "$DONE" ] && break
-      echo "codelab: esperando la instalacion de Moodle... $i/120"; sleep 10
+      echo "codelab: esperando la instalacion de Moodle... $i/360"; sleep 10
     done
     [ -f "$DONE" ] || { echo "codelab: ERROR la instalacion no termino"; exit 1; }
   fi

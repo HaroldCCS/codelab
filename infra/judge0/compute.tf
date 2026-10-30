@@ -130,6 +130,13 @@ resource "aws_autoscaling_group" "app" {
   # Que `apply` no dé por buena la creación hasta que haya un nodo sano.
   wait_for_capacity_timeout = "25m"
 
+  # Mientras arranca (apt, reinicio, pull de varios GB) un nodo está al 100 %
+  # de CPU. Sin calentamiento, el escalado por CPU leía eso como carga y lanzaba
+  # más nodos, que a su vez arrancaban al 100 %: en el primer despliegue (AWS,
+  # 2026-10-30) el grupo subió a 4 instancias sin una sola petición. Durante
+  # este tiempo la CPU de un nodo nuevo no cuenta para la métrica del grupo.
+  default_instance_warmup = 900
+
   launch_template {
     id      = aws_launch_template.app.id
     version = aws_launch_template.app.latest_version

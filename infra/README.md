@@ -24,6 +24,33 @@ como referencia para desplegar desde cero en otra cuenta.
   los dos `providers.tf` y coordinaos a mano.
 - Opcional para validar en local: `shellcheck`.
 
+### Antes del primer despliegue en una cuenta (lecciones del 2026-10-30)
+
+1. **Credenciales para Terraform.** Si inicias sesión con `aws login --profile tesis`, el
+   proveedor de AWS de Terraform **no** entiende ese tipo de sesión (*No valid credential sources
+   found*), y `aws configure export-credentials` da claves que caducan en una hora, a mitad de un
+   despliegue. Crea un perfil que las renueve solo y úsalo para todo:
+   ```ini
+   # ~/.aws/config
+   [profile tesis-tf]
+   region = us-east-1
+   credential_process = aws configure export-credentials --profile tesis --format process
+   ```
+   ```bash
+   export AWS_PROFILE=tesis-tf
+   aws sts get-caller-identity      # debe dar la cuenta 107758684131
+   ```
+2. **Rol de Auto Scaling.** En una cuenta donde nunca se creó un Auto Scaling Group, AWS crea el
+   rol `AWSServiceRoleForAutoScaling` en ese momento y el grupo intenta usarlo segundos antes de
+   que se propague: el `apply` falla con *Access denied when attempting to assume role …
+   AWSServiceRoleForAutoScaling*. Créalo antes (si ya existe, el comando falla sin efecto):
+   ```bash
+   aws iam create-service-linked-role --aws-service-name autoscaling.amazonaws.com
+   ```
+   Si te pasa igualmente, basta con repetir `terraform apply`.
+3. **El bucket del estado está en `us-east-2`**, aunque los recursos se crean en `us-east-1`.
+   Por eso el `backend "s3"` lleva `region = "us-east-2"`: con otra región responde 403.
+
 ## Principios de diseño (decisiones tomadas)
 
 - **Sin RDS.** Las bases de datos corren en Docker sobre una EC2 pequeña (`t3.micro`):
@@ -86,11 +113,28 @@ cp terraform.tfvars.example terraform.tfvars
 #  - judge0_auth_token = el MISMO token del paso 1
 #  - cambia los demás secretos
 terraform init
-terraform apply        # tarda ~15 min: instala Moodle en EFS
+terraform apply        # la infraestructura, ~5 min; Moodle tarda ~30 min más en instalarse
 ```
 
 Output: **`moodle_url`**. La primera instancia descarga Moodle, copia el plugin, instala y
-configura el motor Judge0 automáticamente.
+configura el motor Judge0 automáticamente. **Medido el 2026-10-30 en `t3.small`: unos 29 minutos
+desde que arranca la instancia** (solo descomprimir Moodle 4.5 en EFS y darle dueño, ~17 min).
+Hasta entonces el ALB responde 502: es normal. Por eso la gracia del ASG es de 3600 s.
+
+> **Navegador:** el despliegue sirve solo HTTP. Chrome con «Usar siempre conexiones seguras»
+> convierte la URL a `https://` y muestra una página de error (el puerto 443 no escucha). Desactívalo
+> para ese sitio o usa otro navegador hasta que haya HTTPS (ver Limitaciones).
+
+## Paso 3 — Comprobar el despliegue
+
+Dos pruebas automáticas, en `tests/post-despliegue/` (ver su README):
+
+```bash
+# Motor: token, cinco lenguajes y los 7 casos de SECURITY_TESTS.md
+JUDGE0_URL=<judge0_url> JUDGE0_TOKEN=<token> python3 tests/post-despliegue/pruebas-motor.py
+
+# Moodle -> plugin -> Judge0 -> libro de calificaciones (se ejecuta en el nodo Moodle, por SSM)
+```
 
 ## Cómo arranca todo (para entender los tiempos)
 
@@ -177,6 +221,10 @@ Casos típicos:
 | `GET /languages` devuelve 401 | Normal si definiste `judge0_auth_token`. El health check acepta 200 y 401. |
 | Moodle da error de BD | El nodo MariaDB no arrancó. `docker logs moodle-db` en el nodo de datos. |
 | Instancias que se reemplazan en bucle | La gracia del ASG se agotó: revisa `cloud-init-output.log` de una instancia antes de que muera. |
+| Judge0 ejecuta pero todo da `Internal Error` | El nodo sigue en cgroup v2. Comprueba `stat -fc %T /sys/fs/cgroup` (debe decir `tmpfs`) y `grep unified_cgroup /proc/cmdline`. En la AMI cloud de Ubuntu, `/etc/default/grub.d/50-cloudimg-settings.cfg` pisa lo que se escriba en `/etc/default/grub`; por eso el flag va en `99-codelab-cgroupv1.cfg` (corregido el 2026-10-30). |
+| `judge0-server` en bucle con *Connection refused* hacia Postgres | El contenedor (uid 1000) no puede leer `/opt/judge0/judge0.conf` y usa `localhost`. Debe ser `1000:600` (`stat -c %u:%a`). Corregido el 2026-10-30. |
+| El grupo de Judge0 sube a 4 instancias sin tráfico | La CPU del arranque se leía como carga. Lo evita `default_instance_warmup` (añadido el 2026-10-30). |
+| `apply` falla con *Access denied … AWSServiceRoleForAutoScaling* | Primera vez en la cuenta; ver «Antes del primer despliegue». Repite el `apply`. |
 
 ## Ofrecer Judge0 a otra universidad
 
@@ -195,6 +243,12 @@ cd ../judge0     && terraform destroy
 
 El bucket de state se deja a propósito. Tras los destroy no debe quedar ninguna instancia, ALB,
 EFS, VPC ni disco; verifícalo en la consola por si acaso.
+
+Si `terraform destroy -auto-approve` está bloqueado en tu entorno, el camino equivalente y
+revisable es: `terraform plan -destroy -out=tfplan-destroy` y luego `terraform apply tfplan-destroy`.
+
+> La consola de EC2 sigue mostrando las instancias **terminadas** durante cerca de una hora. No
+> cuestan nada; filtra por «Estado = en ejecución» para ver lo que de verdad está encendido.
 
 ## Costos (orden de magnitud, us-east-1)
 

@@ -94,13 +94,18 @@ la base de datos ni la memoria del servidor.
 
 | ID | Fecha | Motor/versión | Resultado | Notas |
 |----|-------|---------------|-----------|-------|
-| SEC-01 | | | ⬜ | |
-| SEC-02 | | | ⬜ | |
-| SEC-03 | | | ⬜ | |
-| SEC-04 | | | ⬜ | |
-| SEC-05 | | | ⬜ | |
-| SEC-06 | | | ⬜ | |
-| SEC-07 | | | ⬜ | |
+| SEC-01 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | `Time Limit Exceeded` a los 5,095 s (límite de CPU 5 s) |
+| SEC-02 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | `Runtime Error`: `MemoryError` con límite de 128 000 KB |
+| SEC-03 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | `Runtime Error`: `BlockingIOError: [Errno 11]` al superar el límite de procesos |
+| SEC-04 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | `OSError [Errno 101] Network is unreachable`; sin resolución DNS |
+| SEC-05 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | Solo ve la raíz de la caja de `isolate` (`bin, box, dev, etc, lib, lib64, proc, tmp, usr`); ni `config.php` ni `judge0.conf` existen |
+| SEC-06 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | El envío escribe y lee `/tmp/marca.txt`; el siguiente envío no lo ve (`False`) |
+| SEC-07 | 2026-10-30 | Judge0 1.13.1, AWS t3.small | ✅ | `Runtime Error`: `OSError: [Errno 27] File too large` (límite de tamaño de salida) |
+
+Ejecutadas con `evidencias-despliegue-aws/pruebas-motor.py` (raíz del proyecto) contra el motor
+desplegado en AWS, a través del balanceador y con token. Tras las siete, una ejecución normal
+siguió respondiendo `Accepted`: el motor no quedó afectado. Salida completa en
+`evidencias-despliegue-aws/logs/09-pruebas-motor.json`.
 
 > Estas pruebas validan la **restricción no negociable** del proyecto: el código no confiable
 > nunca se ejecuta sin aislamiento con límites de tiempo, memoria, red y disco.
